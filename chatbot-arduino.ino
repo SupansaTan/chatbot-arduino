@@ -32,6 +32,8 @@ const int buzzer = 13;
 
 boolean buzStatus = false;
 
+int alarmTemp = 50;
+
 // Web server running on port 80
 // 192.168.1.43 (ตาม IP ที่ได้)
 WebServer server(80);
@@ -55,8 +57,10 @@ void connectToWiFi() {
 
 void setup_routing() {
   server.on("/temp", HTTP_GET,getTemperature);
+  server.on("/temp", HTTP_POST, setTemperature);
   server.on("/led", HTTP_POST, controlLED);
   server.on("/light", HTTP_GET, getLight);
+  server.on("/datetime", HTTP_GET, getDateTime);
  
   // start server
   server.begin();
@@ -64,7 +68,6 @@ void setup_routing() {
 }
 
 void controlLED() {
-  Serial.println("Control LED");
   if (server.hasArg("plain") == false) {
     Serial.println("error");
   }
@@ -100,6 +103,25 @@ void getTemperature() {
   server.send(200, "application/json", buffer);
 }
 
+void setTemperature() {
+  Serial.println("Set temperature");
+  if (server.hasArg("plain") == false) {
+    Serial.println("error");
+  }
+  String body = server.arg("plain");
+  deserializeJson(jsonDocument, body);
+  
+  // Get data
+  Serial.print("old temperature");
+  Serial.println(alarmTemp);
+  alarmTemp = jsonDocument["temp"];
+  Serial.print("Set temperature");
+  Serial.println(alarmTemp);
+
+  // Respond to the client
+  server.send(200, "application/json", "{}");
+}
+
 void getLight() {
   Serial.println("Get light");
 
@@ -107,6 +129,16 @@ void getLight() {
   jsonDocument.clear();
   jsonDocument["title"] = "light";
   jsonDocument["value"] = getLightFromSensor();
+  serializeJson(jsonDocument, buffer);
+
+  server.send(200, "application/json", buffer);
+}
+
+void getDateTime(){
+  Serial.println("Get DateTime");
+  // create json for response
+  jsonDocument.clear();
+  jsonDocument["datetime"] = getDatetimeFromRTC();
   serializeJson(jsonDocument, buffer);
 
   server.send(200, "application/json", buffer);
@@ -146,11 +178,11 @@ int getLightFromSensor(){
 
 void checkTemp(){
   float temp = getTempFromSensor();
-  if (temp >= 32) {
+  if (temp >= alarmTemp) {                    // if temp >= temp ที่กำหนดไว้ให้แจ้งเตือน
     buzStatus = true;
     digitalWrite(buzzer,HIGH);
-    Serial.println("Temperature is over 32 C");
-    LINE.notify("Temperature is over 32 C");
+    Serial.println("Temperature is over " + String(alarmTemp) + " C");
+    LINE.notify("Temperature is over " + String(alarmTemp) + " C");
   }
 }
 
@@ -182,56 +214,34 @@ void setDateTime(byte sec, byte mint,byte hour, byte wday, byte date, byte month
   Wire.endTransmission();
 }
 
-String getDate(){
-  byte date, month, year;
-  String DD, MM, YY, Date;
+String getDatetimeFromRTC(){
+  byte dayOfWeek, date, month, year, hour, minute, sec;
+  String mm, ss;
+
   Wire.beginTransmission(RTC_ADDR);
-  Wire.write(0x04);
+  Wire.write(0);
   Wire.endTransmission();
+  Wire.requestFrom(RTC_ADDR,7);
 
-  Wire.requestFrom(RTC_ADDR, 3);
-  date       = BcdToDec(Wire.read() & 0x3f);  // 0b00111111
-  month      = BcdToDec(Wire.read() & 0x1f);  // 0b00011111
-  year       = BcdToDec(Wire.read());         
+  sec = BcdToDec(Wire.read() & 0x7F);
+  minute = BcdToDec(Wire.read() & 0x7F);
+  hour = BcdToDec(Wire.read() & 0x3F);
+  dayOfWeek = BcdToDec(Wire.read() & 0x07);
+  date = BcdToDec(Wire.read() & 0x3F);
+  month = BcdToDec(Wire.read() & 0x1F);
+  year = BcdToDec(Wire.read());
 
-  //  format date into DD/MM/YY
-  DD = String(date, DEC);
-  MM = String(month, DEC);
-  YY = String(year, DEC);
-  Date += DD + "/" + MM + "/" + YY;
-  return Date;
-}
-
-String getTime(){
-  byte second, minute, hour;
-  String Time, HH, MN, SS;
-  Wire.beginTransmission(RTC_ADDR);
-  Wire.write(0x00);
-  Wire.endTransmission();
-
-  Wire.requestFrom(RTC_ADDR, 3);
-  second     = BcdToDec(Wire.read() & 0x7f);  // 0b01111111
-  minute     = BcdToDec(Wire.read() & 0x7f);  // 0b01111111
-  hour       = BcdToDec(Wire.read() & 0x3f);  // 0b01111111       
-
-//  format time into HH:MN:SS
-  HH = String(hour, DEC);
-  
-  if (minute < 10) {
-    MN = "0";
+  if (minute < 10){
+    mm = "0";
   }
-  MN += String(minute, DEC);
-
-  if (second < 10) {
-    SS = "0";
+  if (sec < 10){
+    ss = "0";
   }
-  SS += String(second, DEC);
-  
-  Time += HH + ":" + MN + ":" + SS;
-  return Time;
+  mm += String(minute,DEC);
+  ss += String(sec,DEC);
+
+  return String(date,DEC) + "/" + String(month,DEC) + "/" + String(year,DEC) + " " + String(hour,DEC) + ":" + mm + ":" + ss;
 }
-
-
 
 void setup() {     
   Wire.begin(I2C_SDA, I2C_SCL);
@@ -289,11 +299,11 @@ void loop() {
     }
   }
 
-  if( millis() - last_time > 1000) {    // get time every sec
-     last_time = millis();
-     Serial.print("Time: ");
-     printf("%s ", getDate());
-     printf("%s\n", getTime());
-  }
+//  if( millis() - last_time > 1000) {    // get time every sec
+//     last_time = millis();
+//     Serial.print("Time: ");
+//     Serial.print(getDatetimeFromRTC());
+//     Serial.println();
+//  }
   
 }
