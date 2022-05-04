@@ -6,7 +6,7 @@
 #include <WiFi.h>
 #include "time.h"
 
-unsigned long period = 10000; //ระยะเวลาที่ต้องการรอ TempCheck
+unsigned long buzz_lasttime = 0; //ระยะเวลาระพริบ buzzer
 unsigned long last_time = 0; // ใช้สำหรับเทียบเวลาเพื่อ TempCheck
 
 #define I2C_SDA 4
@@ -29,8 +29,11 @@ const int   daylightOffset_sec = 25200;
 const int output26 = 26;
 const int output27 = 27;
 const int buzzer = 13;
+const int ch = 0;
 
 boolean buzStatus = false;
+boolean buzz_sound = false;
+boolean led_bool = false;
 
 int alarmTemp = 50;
 
@@ -77,14 +80,14 @@ void controlLED() {
   
   // Get data
   String led_status = jsonDocument["led"];
-  Serial.println("Get open led: " + led_status);
+  Serial.println("LED Status: " + led_status);
   if (led_status == "ON"){
-    digitalWrite(output26, HIGH);
-    digitalWrite(output27, HIGH);
+      digitalWrite(output26, HIGH);
+      digitalWrite(output27, HIGH);
   }
-  else {
-    digitalWrite(output26, LOW);
-    digitalWrite(output27, LOW);
+  else if (led_status == "OFF"){
+      digitalWrite(output26, LOW);
+      digitalWrite(output27, LOW);
   }
 
   // Respond to the client
@@ -179,10 +182,11 @@ int getLightFromSensor(){
 void checkTemp(){
   float temp = getTempFromSensor();
   if (temp >= alarmTemp) {                    // if temp >= temp ที่กำหนดไว้ให้แจ้งเตือน
-    buzStatus = true;
-    digitalWrite(buzzer,HIGH);
     Serial.println("Temperature is over " + String(alarmTemp) + " C");
     LINE.notify("Temperature is over " + String(alarmTemp) + " C");
+    buzStatus = true;
+    ledcWrite(ch,25);
+    ledcWriteNote(ch, NOTE_F, 4);
   }
 }
 
@@ -249,7 +253,11 @@ void setup() {
   Serial.begin(115200);  
   pinMode(output26, OUTPUT);  // IO26
   pinMode(output27, OUTPUT);  // IO27
-  pinMode(buzzer, OUTPUT);    // Buzzer
+
+  //Buzzer
+  ledcSetup(ch,0,8);
+  ledcAttachPin(buzzer,ch);
+  
   // Set outputs to LOW
   digitalWrite(output26, LOW);
   digitalWrite(output27, LOW);
@@ -284,26 +292,28 @@ void loop() {
   server.handleClient();
   
   // เตือนอุณหภูมิสูงทุกๆ 10 วินาที (สำหรับเทส ตอนจริงเปลี่ยนเวลาได้)
-  if( millis() - last_time > period) {
+  if( millis() - last_time > 10000) {
      last_time = millis();
      Serial.println("Check Temp");
      checkTemp();
   }
   
-  // buzzer เตือนอุณหภูมิสูงดัง 5 วินาทีแล้วดับ
+  // buzzer เตือนอุณหภูมิสูงดัง 4 วินาทีแล้วดับ
   if (buzStatus == true) {
-    if( millis() - last_time > 5000) {
-     buzStatus = false;
-     digitalWrite(buzzer, LOW);
+    if( millis() - last_time > 3000) {
+      buzStatus = false;
+      ledcWriteTone(ch,0);
      Serial.println("Buzzer Alarm Finish");
     }
+    else if( millis() - buzz_lasttime > 500) {
+      buzz_lasttime = millis();
+      if (buzz_sound){
+        ledcWriteTone(ch,0);
+      }
+      else{
+        ledcWriteNote(ch, NOTE_C, 4);
+      }
+    }
   }
-
-//  if( millis() - last_time > 1000) {    // get time every sec
-//     last_time = millis();
-//     Serial.print("Time: ");
-//     Serial.print(getDatetimeFromRTC());
-//     Serial.println();
-//  }
   
 }
