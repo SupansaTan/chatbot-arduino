@@ -8,6 +8,7 @@
 
 unsigned long buzz_lasttime = 0; //ระยะเวลาระพริบ buzzer
 unsigned long last_time = 0; // ใช้สำหรับเทียบเวลาเพื่อ TempCheck
+unsigned long Timer_lasttime = 0; // ใช้สำหรับเทียบเวลาแจ้งเตือน Timer
 
 #define I2C_SDA 4
 #define I2C_SCL 5
@@ -34,8 +35,10 @@ const int ch = 0;
 boolean buzStatus = false;
 boolean buzz_sound = false;
 boolean led_bool = false;
+boolean Timer_bool = false;
 
 int alarmTemp = 50;
+int Timer_Time = 0;
 
 // Web server running on port 80
 // 192.168.1.43 (ตาม IP ที่ได้)
@@ -64,6 +67,7 @@ void setup_routing() {
   server.on("/led", HTTP_POST, controlLED);
   server.on("/light", HTTP_GET, getLight);
   server.on("/datetime", HTTP_GET, getDateTime);
+  server.on("/timer", HTTP_POST, setTimer);
  
   // start server
   server.begin();
@@ -147,6 +151,23 @@ void getDateTime(){
   server.send(200, "application/json", buffer);
 }
 
+void setTimer() {
+  Serial.println("Set Timer");
+  if (server.hasArg("plain") == false) {
+    Serial.println("error");
+  }
+  String body = server.arg("plain");
+  deserializeJson(jsonDocument, body);
+  
+  // Get data
+  Timer_Time = jsonDocument["time"];
+  Timer_Time = Timer_Time *1000;
+  Timer_lasttime = millis();          // set lasttime = now
+  Timer_bool = true;
+  // Respond to the client
+  server.send(200, "application/json", "{}");
+}
+
 float getTempFromSensor() {
   byte TempBin[2];
   unsigned int tempVal;
@@ -182,7 +203,7 @@ int getLightFromSensor(){
 void checkTemp(){
   float temp = getTempFromSensor();
   if (temp >= alarmTemp) {                    // if temp >= temp ที่กำหนดไว้ให้แจ้งเตือน
-    Serial.println("Temperature is over " + String(alarmTemp) + " C");
+//    Serial.println("Temperature is over " + String(alarmTemp) + " C");
     LINE.notify("Temperature is over " + String(alarmTemp) + " C");
     buzStatus = true;
     ledcWrite(ch,25);
@@ -299,8 +320,8 @@ void loop() {
   }
   
   // buzzer เตือนอุณหภูมิสูงดัง 4 วินาทีแล้วดับ
-  if (buzStatus == true) {
-    if( millis() - last_time > 3000) {
+  if (buzStatus) {
+    if( millis() - last_time > 4000) {
       buzStatus = false;
       ledcWriteTone(ch,0);
      Serial.println("Buzzer Alarm Finish");
@@ -311,9 +332,26 @@ void loop() {
         ledcWriteTone(ch,0);
       }
       else{
-        ledcWriteNote(ch, NOTE_C, 4);
+        ledcWriteNote(ch, NOTE_F, 4);
       }
     }
   }
+
+  // check Timer finish
+  if (Timer_bool){
+    if( millis() - Timer_lasttime > Timer_Time) {
+//     Serial.print("timediff ");
+//     Serial.println(millis() - Timer_lasttime);
+//     Serial.print("timer set ");
+//     Serial.println(Timer_Time);
+     ledcWriteNote(ch, NOTE_C, 5);
+     Timer_bool = false;
+     LINE.notify("Time is up");
+     delay(500);
+     ledcWriteTone(ch,0);
+    }
+  }
+  
+  
   
 }
