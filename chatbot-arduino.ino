@@ -76,6 +76,7 @@ void setup_routing() {
 void controlLED() {
   if (server.hasArg("plain") == false) {
     Serial.println("error");
+    server.send(500, "application/json", "{}");
   }
   Serial.println("toggle LED");
   String body = server.arg("plain");
@@ -85,14 +86,16 @@ void controlLED() {
   String led_status = jsonDocument["led"];
   Serial.println("LED Status: " + led_status);
   if (led_status == "ON"){
-      digitalWrite(output26, HIGH);
+    digitalWrite(output26, HIGH);
+    server.send(200, "application/json", "{}");
   }
   else if (led_status == "OFF"){
-      digitalWrite(output26, LOW);
+    digitalWrite(output26, LOW);
+    server.send(200, "application/json", "{}");
   }
-
-  // Respond to the client
-  server.send(200, "application/json", "{}");
+  else {
+    server.send(500, "application/json", "{}");
+  }
 }
 
 void getTemperature() {
@@ -111,6 +114,7 @@ void setTemperature() {
   Serial.println("Set temperature");
   if (server.hasArg("plain") == false) {
     Serial.println("error");
+    server.send(500, "application/json", "{}");
   }
   String body = server.arg("plain");
   deserializeJson(jsonDocument, body);
@@ -148,6 +152,7 @@ void setTimer() {
   Serial.println("Set Timer");
   if (server.hasArg("plain") == false) {
     Serial.println("error");
+    server.send(500, "application/json", "{}");
   }
   String body = server.arg("plain");
   deserializeJson(jsonDocument, body);
@@ -313,7 +318,7 @@ void loop() {
     if( millis() - last_time > 4000) {
       buzStatus = false;
       ledcWriteTone(ch,0);
-     Serial.println("Buzzer Alarm Finish");
+      Serial.println("Buzzer Alarm Finish");
     }
     else if( millis() - buzz_lasttime > 500) {
       buzz_lasttime = millis();
