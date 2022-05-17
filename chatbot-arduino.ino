@@ -28,7 +28,6 @@ const int   daylightOffset_sec = 25200;
 
 // Assign output variables to GPIO pins
 const int output26 = 26;
-const int output27 = 27;
 const int buzzer = 13;
 const int ch = 0;
 
@@ -87,11 +86,9 @@ void controlLED() {
   Serial.println("LED Status: " + led_status);
   if (led_status == "ON"){
       digitalWrite(output26, HIGH);
-      digitalWrite(output27, HIGH);
   }
   else if (led_status == "OFF"){
       digitalWrite(output26, LOW);
-      digitalWrite(output27, LOW);
   }
 
   // Respond to the client
@@ -119,11 +116,7 @@ void setTemperature() {
   deserializeJson(jsonDocument, body);
   
   // Get data
-  Serial.print("old temperature");
-  Serial.println(alarmTemp);
   alarmTemp = jsonDocument["temp"];
-  Serial.print("Set temperature");
-  Serial.println(alarmTemp);
 
   // Respond to the client
   server.send(200, "application/json", "{}");
@@ -194,9 +187,6 @@ float getTempFromSensor() {
 
 int getLightFromSensor(){
   int analog_value = analogRead(36);
-  Serial.print("Light : ");
-  Serial.print(analog_value);
-  Serial.println();
   return analog_value;
 }
 
@@ -273,7 +263,6 @@ void setup() {
   Wire.begin(4, 5);
   Serial.begin(115200);  
   pinMode(output26, OUTPUT);  // IO26
-  pinMode(output27, OUTPUT);  // IO27
 
   //Buzzer
   ledcSetup(ch,0,8);
@@ -281,7 +270,6 @@ void setup() {
   
   // Set outputs to LOW
   digitalWrite(output26, LOW);
-  digitalWrite(output27, LOW);
   digitalWrite(buzzer, LOW);
   
   LINE.setToken(LINE_TOKEN);
@@ -311,6 +299,7 @@ void setup() {
        
 void loop() {    
   server.handleClient();
+  int lightIntensity = getLightFromSensor();
   
   // เตือนอุณหภูมิสูงทุกๆ 10 วินาที (สำหรับเทส ตอนจริงเปลี่ยนเวลาได้)
   if( millis() - last_time > 10000) {
@@ -340,15 +329,25 @@ void loop() {
   // check Timer finish
   if (Timer_bool){
     if( millis() - Timer_lasttime > Timer_Time) {
-//     Serial.print("timediff ");
-//     Serial.println(millis() - Timer_lasttime);
-//     Serial.print("timer set ");
-//     Serial.println(Timer_Time);
      ledcWriteNote(ch, NOTE_C, 5);
      Timer_bool = false;
      LINE.notify("Time is up");
      delay(500);
      ledcWriteTone(ch,0);
+    }
+  }
+
+  // turn on led when dark & turn off when bright
+  if(led_bool){
+    if (lightIntensity < 700){
+      digitalWrite(output26, LOW);
+      led_bool = false;
+    }
+  }
+  else{
+    if (lightIntensity > 700){
+      digitalWrite(output26, HIGH);
+      led_bool = true;
     }
   }
   
