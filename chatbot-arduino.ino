@@ -34,6 +34,7 @@ const int ch = 0;
 boolean buzStatus = false;
 boolean buzz_sound = false;
 boolean led_bool = false;
+boolean led_com_bool = false;
 boolean Timer_bool = false;
 
 int alarmTemp = 50;
@@ -63,6 +64,7 @@ void connectToWiFi() {
 void setup_routing() {
   server.on("/temp", HTTP_GET,getTemperature);
   server.on("/temp", HTTP_POST, setTemperature);
+  server.on("/led", HTTP_GET, getLedStatus);
   server.on("/led", HTTP_POST, controlLED);
   server.on("/light", HTTP_GET, getLight);
   server.on("/datetime", HTTP_GET, getDateTime);
@@ -71,6 +73,23 @@ void setup_routing() {
   // start server
   server.begin();
   server.enableCORS(true);
+}
+
+void getLedStatus(){
+  Serial.println("Get LedStatus");
+
+  // create json for response
+  jsonDocument.clear();
+  jsonDocument["title"] = "temperature";
+  if (led_com_bool){
+    jsonDocument["value"] = "ON";
+  }
+  else {
+    jsonDocument["value"] = "OFF";
+  }
+  serializeJson(jsonDocument, buffer);
+
+  server.send(200, "application/json", buffer);
 }
 
 void controlLED() {
@@ -87,10 +106,12 @@ void controlLED() {
   Serial.println("LED Status: " + led_status);
   if (led_status == "ON"){
     digitalWrite(output26, HIGH);
+    led_com_bool = true;
     server.send(200, "application/json", "{}");
   }
   else if (led_status == "OFF"){
     digitalWrite(output26, LOW);
+    led_com_bool = false;
     server.send(200, "application/json", "{}");
   }
   else {
@@ -347,12 +368,14 @@ void loop() {
     if (lightIntensity < 700){
       digitalWrite(output26, LOW);
       led_bool = false;
+      led_com_bool = false;
     }
   }
   else{
     if (lightIntensity > 700){
       digitalWrite(output26, HIGH);
       led_bool = true;
+      led_com_bool = true;
     }
   }
   
