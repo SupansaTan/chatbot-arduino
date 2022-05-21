@@ -4,7 +4,7 @@
 #include <ArduinoJson.h>
 #include <TridentTD_LineNotify.h>
 #include <WiFi.h>
-#include "time.h"
+#include <time.h>
 
 unsigned long buzz_lasttime = 0; //ระยะเวลาระพริบ buzzer
 unsigned long last_time = 0; // ใช้สำหรับเทียบเวลาเพื่อ TempCheck
@@ -36,9 +36,12 @@ boolean buzz_sound = false;
 boolean led_bool = false;
 boolean led_com_bool = false;
 boolean Timer_bool = false;
+boolean setStatusLED = false;
+boolean hasSetDatetimeLed = false;
 
 int alarmTemp = 50;
 int Timer_Time = 0;
+String datetimeToggleLed = "";
 
 // Web server running on port 80
 // 192.168.1.43 (ตาม IP ที่ได้)
@@ -66,6 +69,7 @@ void setup_routing() {
   server.on("/temp", HTTP_POST, setTemperature);
   server.on("/led", HTTP_GET, getLedStatus);
   server.on("/led", HTTP_POST, controlLED);
+  server.on("/setDateTimeLed", HTTP_POST, setTimeToggleLED);
   server.on("/light", HTTP_GET, getLight);
   server.on("/datetime", HTTP_GET, getDateTime);
   server.on("/timer", HTTP_POST, setTimer);
@@ -112,6 +116,35 @@ void controlLED() {
   else if (led_status == "OFF"){
     digitalWrite(output26, LOW);
     led_com_bool = false;
+    server.send(200, "application/json", "{}");
+  }
+  else {
+    server.send(500, "application/json", "{}");
+  }
+}
+
+void setTimeToggleLED() {
+  if (server.hasArg("plain") == false) {
+    Serial.println("error");
+    server.send(500, "application/json", "{}");
+  }
+  Serial.println("toggle LED");
+  String body = server.arg("plain");
+  deserializeJson(jsonDocument, body);
+  
+  // Get data
+  String led_status = jsonDocument["led"];
+  String datetime = jsonDocument["datetime"];
+  hasSetDatetimeLed = true;
+  datetimeToggleLed = datetime;
+  Serial.println(datetimeToggleLed);
+  
+  if (led_status == "ON"){
+    setStatusLED = true;
+    server.send(200, "application/json", "{}");
+  }
+  else if (led_status == "OFF"){
+    setStatusLED = false;
     server.send(200, "application/json", "{}");
   }
   else {
@@ -257,7 +290,7 @@ void setDateTime(byte sec, byte mint,byte hour, byte wday, byte date, byte month
 
 String getDatetimeFromRTC(){
   byte dayOfWeek, date, month, year, hour, minute, sec;
-  String mm, ss;
+  String hh, mm, ss, MM, dd;
 
   Wire.beginTransmission(RTC_ADDR);
   Wire.write(0);
@@ -272,16 +305,28 @@ String getDatetimeFromRTC(){
   month = BcdToDec(Wire.read() & 0x1F);
   year = BcdToDec(Wire.read());
 
+  if (month < 10){
+    MM = "0";
+  }
+  if (date < 10){
+    dd = "0";
+  }
+  if (hour < 0){
+    hh = "0";
+  }
   if (minute < 10){
     mm = "0";
   }
   if (sec < 10){
     ss = "0";
   }
+  dd += String(date,DEC);
+  MM += String(month,DEC);
+  hh += String(hour,DEC);
   mm += String(minute,DEC);
   ss += String(sec,DEC);
 
-  return String(date,DEC) + "/" + String(month,DEC) + "/" + String(year,DEC) + " " + String(hour,DEC) + ":" + mm + ":" + ss;
+  return dd + "/" + MM + "/" + String(year,DEC) + " " + hh + ":" + mm + ":" + ss;
 }
 
 void setup() {     
@@ -364,7 +409,7 @@ void loop() {
   }
 
   // turn on led when dark & turn off when bright
-  if(led_bool){
+  if(led_bool && !hasSetDatetimeLed){
     if (lightIntensity < 700){
       digitalWrite(output26, LOW);
       led_bool = false;
@@ -379,6 +424,19 @@ void loop() {
     }
   }
   
-  
-  
+  if(hasSetDatetimeLed){
+    String now = getDatetimeFromRTC();
+    if(now == datetimeToggleLed){
+      if(setStatusLED) {
+        led_com_bool = true;
+        digitalWrite(output26, HIGH);
+        LINE.notify("The light is on.");
+      }
+      else {
+        led_com_bool = false;
+        digitalWrite(output26, LOW);
+        LINE.notify("The light is off.");
+      }
+    }
+  }
 }
