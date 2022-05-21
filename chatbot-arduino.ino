@@ -311,7 +311,7 @@ String getDatetimeFromRTC(){
   if (date < 10){
     dd = "0";
   }
-  if (hour < 0){
+  if (hour < 10){
     hh = "0";
   }
   if (minute < 10){
